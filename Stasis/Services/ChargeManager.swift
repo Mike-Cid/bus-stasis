@@ -19,6 +19,7 @@ class ChargeManager {
     private var hasReachedChargeLimit = false
     private var lastNotifiedChargingState: Bool?
 
+    private(set) var chargeControlFailure: String?
     private(set) var chargeLimitOverrideActive = false
     private(set) var forceDischargeActive = false
     private(set) var workWithACActive = Defaults[.workWithACActive] {
@@ -219,9 +220,11 @@ class ChargeManager {
         Task {
             do {
                 try await batteryService.manageBatteryCharging(enabled: enabled)
+                chargeControlFailure = nil
                 batteryService.scheduleSinglePoll()
             } catch {
                 logger.error("Failed to set charging to \(enabled): \(error)")
+                chargeControlFailure = error.localizedDescription
             }
         }
     }
@@ -231,9 +234,11 @@ class ChargeManager {
         Task {
             do {
                 try await batteryService.manageExternalPower(enabled: enabled)
+                chargeControlFailure = nil
                 batteryService.scheduleSinglePoll()
             } catch {
                 logger.error("Failed to set adapter to \(enabled): \(error)")
+                chargeControlFailure = error.localizedDescription
             }
         }
     }

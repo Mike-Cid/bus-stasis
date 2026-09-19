@@ -32,6 +32,7 @@ class MenuViewModel {
     var chargeLimitOverrideActive: Bool { chargeManager.chargeLimitOverrideActive }
     var forceDischargeActive: Bool { chargeManager.forceDischargeActive }
     var workWithACActive: Bool { chargeManager.workWithACActive }
+    var chargeControlFailure: String? { chargeManager.chargeControlFailure }
     var workWithACStatusText: String = "Off"
     var workWithACBatteryAssistDetected: Bool = false
     var workWithACChargingDetected: Bool = false

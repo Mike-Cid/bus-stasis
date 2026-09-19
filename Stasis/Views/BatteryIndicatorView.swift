@@ -32,24 +32,19 @@ struct BatteryIndicatorView: View {
             }
 
             HStack(spacing: 0) {
-                ZStack {
+                let fillWidth = (Layout.batteryWidth - Layout.fillInset * 2)
+                    * CGFloat(batteryLevel) / 100
+
+                ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: Layout.cornerRadius)
                         .stroke(lineWidth: Layout.strokeWidth)
-                        .opacity(0.4)
+                        .opacity(0.6)
 
-                    GeometryReader { geo in
-                        let fillWidth =
-                            (geo.size.width - Layout.fillInset * 2)
-                            * CGFloat(batteryLevel)
-                            / 100
-                        RoundedRectangle(
-                            cornerRadius: Layout.cornerRadius - Layout.fillInset
-                        )
+                    RoundedRectangle(cornerRadius: Layout.cornerRadius - Layout.fillInset)
                         .fill(fillColor)
-                        .frame(width: max(0, fillWidth))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(Layout.fillInset)
-                    }
+                        .frame(width: max(0, fillWidth),
+                               height: Layout.batteryHeight - Layout.fillInset * 2)
+                        .padding(.leading, Layout.fillInset)
                 }
                 .frame(width: Layout.batteryWidth, height: Layout.batteryHeight)
                 .overlay {
@@ -63,11 +58,9 @@ struct BatteryIndicatorView: View {
                                 .rotationEffect(.degrees(-90))
                         }
                     }
-                    .foregroundStyle(.white)
-                    .shadow(color: .black, radius: 0.5)
-                    .shadow(color: .black, radius: 0.5)
-                    .shadow(color: .black, radius: 0.5)
+                    .blendMode(.destinationOut)
                 }
+                .compositingGroup()
 
                 BatteryTerminal(
                     width: Layout.terminalWidth,

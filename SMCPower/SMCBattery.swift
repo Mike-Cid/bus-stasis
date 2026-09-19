@@ -1,8 +1,31 @@
 import Foundation
 import SMCKit
 
-public enum SMCBatteryError: Error, Sendable {
+public enum SMCBatteryError: LocalizedError, Sendable {
     case unsupportedCapability
+    case keyUnreadable(String)
+    case writeRejected(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedCapability:
+            "This Mac does not expose the SMC keys required for charge control"
+        case .keyUnreadable(let key):
+            "The SMC key \(key) could not be read"
+        case .writeRejected(let key):
+            "The SMC rejected the write to \(key); macOS may be restricting charge control"
+        }
+    }
+}
+
+/*
+ * CHIE is a bit mask holding both charge control behaviours. It is the only
+ * charge control key left on Apple silicon running macOS 27, where CH0C, CHTE
+ * and CH0I are no longer published by the SMC.
+ */
+private enum ChargeControlBits {
+    static let inhibitCharging: UInt8 = 0x01
+    static let forceDischarge: UInt8 = 0x08
 }
 
 public struct BatteryCapabilities: Codable, Sendable {
@@ -31,7 +54,7 @@ public struct SMCBattery: Sendable {
         let hasCHIE = try SMCKit.shared.isKeyFound("CHIE")
 
         let capabilities = BatteryCapabilities(
-            inhibitChargeControl: hasCH0C || hasCHTE,
+            inhibitChargeControl: hasCH0C || hasCHTE || hasCHIE,
             forceDischargeControl: hasCH0I || hasCHIE
         )
 
@@ -66,9 +89,11 @@ public struct SMCBattery: Sendable {
         if hasCHTE {
             let value: UInt32 = try SMCKit.shared.read("CHTE")
             return value != 0
-        } else {
+        } else if hasCH0C {
             let value: UInt8 = try SMCKit.shared.read("CH0C")
             return value != 0
+        } else {
+            return try readChargeControlBits() & ChargeControlBits.inhibitCharging != 0
         }
     }
 
@@ -81,12 +106,17 @@ public struct SMCBattery: Sendable {
             }
             let value: UInt32 = inhibited ? 1 : 0
             try SMCKit.shared.write("CHTE", value)
-        } else {
+        } else if hasCH0C {
             if !inhibited && hasCH0I {
                 try SMCKit.shared.write("CH0I", UInt8(0))
             }
             let value: UInt8 = inhibited ? 1 : 0
             try SMCKit.shared.write("CH0C", value)
+        } else {
+            try setChargeControlBits(
+                ChargeControlBits.inhibitCharging,
+                enabled: inhibited
+            )
         }
     }
 
@@ -96,8 +126,7 @@ public struct SMCBattery: Sendable {
         }
 
         if hasCHIE {
-            let data = try SMCKit.shared.readData("CHIE")
-            return data.first == 0x08
+            return try readChargeControlBits() & ChargeControlBits.forceDischarge != 0
         } else {
             let value: UInt8 = try SMCKit.shared.read("CH0I")
             return value != 0
@@ -118,16 +147,43 @@ public struct SMCBattery: Sendable {
             }
 
             if hasCHIE {
-                try SMCKit.shared.writeData("CHIE", Data([0x08]))
+                try writeChargeControlBits(ChargeControlBits.forceDischarge)
             } else {
                 try SMCKit.shared.write("CH0I", UInt8(1))
             }
         } else {
             if hasCHIE {
-                try SMCKit.shared.writeData("CHIE", Data([0x00]))
+                try setChargeControlBits(
+                    ChargeControlBits.forceDischarge,
+                    enabled: false
+                )
             } else {
                 try SMCKit.shared.write("CH0I", UInt8(0))
             }
+        }
+    }
+
+    private func readChargeControlBits() throws -> UInt8 {
+        guard let bits = try SMCKit.shared.readData("CHIE").first else {
+            throw SMCBatteryError.keyUnreadable("CHIE")
+        }
+        return bits
+    }
+
+    private func setChargeControlBits(_ mask: UInt8, enabled: Bool) throws {
+        let current = try readChargeControlBits()
+        let updated = enabled ? current | mask : current & ~mask
+        guard updated != current else { return }
+        try writeChargeControlBits(updated)
+    }
+
+    /// The SMC silently ignores writes it does not honour, so the value is read
+    /// back to turn a rejected write into an error the UI can report.
+    private func writeChargeControlBits(_ bits: UInt8) throws {
+        try SMCKit.shared.writeData("CHIE", Data([bits]))
+
+        guard try readChargeControlBits() == bits else {
+            throw SMCBatteryError.writeRejected("CHIE")
         }
     }
 }

@@ -1,259 +1,193 @@
-import AppKit
 import Defaults
 import SwiftUI
 
-@MainActor
-class MenuBuilder {
-    private let viewModel: MenuViewModel
-    private let settingsWindowController: SettingsWindowController
+/// SwiftUI content shown when the user opens the `MenuBarExtra`. Replaces the
+/// former AppKit `NSMenu` so the whole menu bar presence is SwiftUI-managed.
+struct MenuContentView: View {
+    let viewModel: MenuViewModel
+    let settingsWindowController: SettingsWindowController?
 
-    init(
-        viewModel: MenuViewModel,
-        settingsWindowController: SettingsWindowController
-    ) {
-        self.viewModel = viewModel
-        self.settingsWindowController = settingsWindowController
+    @Default(.showPowerSource) private var showPowerSource
+    @Default(.showTimeTillDischarge) private var showTimeTillDischarge
+    @Default(.showUptime) private var showUptime
+    @Default(.showBatteryMode) private var showBatteryMode
+    @Default(.showBatteryTemperature) private var showBatteryTemperature
+    @Default(.showInternalPower) private var showInternalPower
+    @Default(.showExternalPower) private var showExternalPower
+    @Default(.showPowerDistribution) private var showPowerDistribution
+    @Default(.showBatteryCycleCount) private var showBatteryCycleCount
+    @Default(.showBatteryHealth) private var showBatteryHealth
+    @Default(.showWorkWithAC) private var showWorkWithAC
+    @Default(.showChargeLimitOverride) private var showChargeLimitOverride
+    @Default(.showForceDischarge) private var showForceDischarge
+    @Default(.manageCharging) private var manageCharging
+
+    private var infoHasContent: Bool {
+        showPowerSource || showTimeTillDischarge || showUptime || showBatteryMode
+            || showBatteryTemperature
     }
 
-    func buildMenu() -> NSMenu {
-        let menu = NSMenu(title: "Stasis")
-        populateMenu(menu)
-        return menu
+    private var powerMetricsHasContent: Bool {
+        showInternalPower || showExternalPower
     }
 
-    func populateMenu(_ menu: NSMenu) {
-        menu.removeAllItems()
+    private var hardwareHasContent: Bool {
+        showBatteryCycleCount || showBatteryHealth
+    }
 
-        let mainInfoItem = createMenuItem(
-            view: BatteryMainInfoView(viewModel: viewModel)
-        )
-        menu.addItem(mainInfoItem)
+    private var chargingHasContent: Bool {
+        manageCharging && (showWorkWithAC || showChargeLimitOverride || showForceDischarge)
+    }
 
-        let sections: [[NSMenuItem]] = [
-            buildInfoSection(),
-            buildPowerMetricsSection(),
-            buildVisualizationSection(),
-            buildHardwareSection(),
-        ]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            BatteryMainInfo(
+                label: String(localized: "Battery"),
+                value: viewModel.batteryPercentageText
+            )
 
-        for section in sections where !section.isEmpty {
-            menu.addItem(NSMenuItem.separator())
-            for item in section {
-                menu.addItem(item)
+            if infoHasContent {
+                sectionDivider
+                if showPowerSource {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Power Source"),
+                        value: viewModel.powerSourceText
+                    )
+                }
+                if showTimeTillDischarge {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Time Remaining"),
+                        value: viewModel.timeRemainingText
+                    )
+                }
+                if showUptime {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Uptime"),
+                        value: viewModel.uptimeText
+                    )
+                }
+                if showBatteryMode {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Battery Mode"),
+                        value: viewModel.batteryModeText
+                    )
+                }
+                if showBatteryTemperature {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Battery Temperature"),
+                        value: viewModel.batteryTemperatureText
+                    )
+                }
             }
-        }
 
-        if viewModel.manageChargingEnabled {
-            let showWorkWithAC = Defaults[.showWorkWithAC]
-            let showChargeLimitOverride = Defaults[.showChargeLimitOverride]
-            let showForceDischarge = Defaults[.showForceDischarge]
+            if powerMetricsHasContent {
+                sectionDivider
+                if showInternalPower {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Battery"),
+                        value: viewModel.internalInputText
+                    )
+                }
+                if showExternalPower {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Adapter"),
+                        value: viewModel.externalInputText
+                    )
+                }
+            }
 
-            if showWorkWithAC || showChargeLimitOverride || showForceDischarge {
-                menu.addItem(NSMenuItem.separator())
+            if showPowerDistribution {
+                sectionDivider
+                PowerSankeyView(
+                    powerSource: viewModel.powerSource,
+                    isCharging: viewModel.isCharging,
+                    batteryPower: viewModel.batteryPower,
+                    adapterPower: viewModel.adapterPower,
+                    systemPower: viewModel.systemPower
+                )
+            }
+
+            if hardwareHasContent {
+                sectionDivider
+                if showBatteryCycleCount {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Cycle Count"),
+                        value: viewModel.cycleCountText
+                    )
+                }
+                if showBatteryHealth {
+                    BatteryAdditionalInfo(
+                        label: String(localized: "Battery Health"),
+                        value: viewModel.batteryHealthText
+                    )
+                }
+            }
+
+            if let chargeControlFailure = viewModel.chargeControlFailure {
+                sectionDivider
+                Text("Charge control failed: \(chargeControlFailure)")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 4)
+            }
+
+            if chargingHasContent {
+                sectionDivider
                 if showWorkWithAC {
-                    menu.addItem(createMenuItem(view: WorkWithACToggleView(viewModel: viewModel)))
+                    WorkWithACToggleView(viewModel: viewModel)
                 }
                 if showChargeLimitOverride {
-                    menu.addItem(createMenuItem(view: ChargeLimitOverrideToggleView(viewModel: viewModel)))
+                    ChargeLimitOverrideToggleView(viewModel: viewModel)
                 }
                 if showForceDischarge {
-                    menu.addItem(createMenuItem(view: ForceDischargeToggleView(viewModel: viewModel)))
+                    ForceDischargeToggleView(viewModel: viewModel)
                 }
             }
+
+            sectionDivider
+            MenuActionButton(title: String(localized: "Settings")) {
+                settingsWindowController?.showSettings()
+            }
+            MenuActionButton(title: String(localized: "Quit")) {
+                viewModel.quit()
+            }
+            .padding(.bottom, 4)
         }
-
-        menu.addItem(NSMenuItem.separator())
-
-        let settingsItem = NSMenuItem(
-            title: String(localized:  "Settings"),
-            action: #selector(handleSettings),
-            keyEquivalent: ","
-        )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let quitItem = NSMenuItem(
-            title: String(localized: "Quit"),
-            action: #selector(handleQuit),
-            keyEquivalent: "q"
-        )
-        quitItem.target = self
-        menu.addItem(quitItem)
+        .frame(width: 300)
+        .onAppear { viewModel.menuWillOpen() }
+        .onDisappear { viewModel.menuDidClose() }
     }
 
-    private func buildInfoSection() -> [NSMenuItem] {
-        var items: [NSMenuItem] = []
-
-        if Defaults[.showPowerSource] {
-            items.append(
-                createInfoItem(
-                    label: String(localized: "Power Source"),
-                    keyPath: \.powerSourceText
-                )
-            )
-        }
-        if Defaults[.showTimeTillDischarge] {
-            items.append(
-                createInfoItem(
-                    label: String(localized: "Time Remaining"),
-                    keyPath: \.timeRemainingText
-                )
-            )
-        }
-        if Defaults[.showUptime] {
-            items.append(createInfoItem(label: String(localized: "Uptime"), keyPath: \.uptimeText))
-        }
-        if Defaults[.showBatteryMode] {
-            items.append(
-                createInfoItem(
-                    label: String(localized: "Battery Mode"),
-                    keyPath: \.batteryModeText
-                )
-            )
-        }
-        if Defaults[.showBatteryTemperature] {
-            items.append(
-                createInfoItem(
-                    label: String(localized: "Battery Temperature"),
-                    keyPath: \.batteryTemperatureText
-                )
-            )
-        }
-
-        return items
-    }
-
-    private func buildPowerMetricsSection() -> [NSMenuItem] {
-        var items: [NSMenuItem] = []
-
-        if Defaults[.showInternalPower] {
-            items.append(
-                createInfoItem(
-                    label: String(localized: "Battery"),
-                    keyPath: \.internalInputText
-                )
-            )
-        }
-        if Defaults[.showExternalPower] {
-            items.append(
-                createInfoItem(
-                    label: String(localized: "Adapter"),
-                    keyPath: \.externalInputText
-                )
-            )
-        }
-
-        return items
-    }
-
-    private func buildVisualizationSection() -> [NSMenuItem] {
-        var items: [NSMenuItem] = []
-
-        if Defaults[.showPowerDistribution] {
-            items.append(
-                createMenuItem(
-                    view: PowerSankeyViewWrapper(viewModel: viewModel)
-                )
-            )
-        }
-
-        return items
-    }
-
-    private func buildHardwareSection() -> [NSMenuItem] {
-        var items: [NSMenuItem] = []
-
-        if Defaults[.showBatteryCycleCount] {
-            items.append(
-                createInfoItem(label: String(localized: "Cycle Count"), keyPath: \.cycleCountText)
-            )
-        }
-        if Defaults[.showBatteryHealth] {
-            items.append(
-                createInfoItem(
-                    label: String(localized: "Battery Health"),
-                    keyPath: \.batteryHealthText
-                )
-            )
-        }
-
-        return items
-    }
-
-    private func createInfoItem(
-        label: String,
-        keyPath: KeyPath<MenuViewModel, String>
-    ) -> NSMenuItem {
-        createMenuItem(
-            view: BatteryAdditionalInfoObserverView(
-                label: label,
-                viewModel: viewModel,
-                keyPath: keyPath
-            )
-        )
-    }
-
-    private static let menuWidth: CGFloat = 300
-
-    private func createMenuItem<V: View>(view: V) -> NSMenuItem {
-        let hostingView = NSHostingView(rootView: view)
-        let height = hostingView.fittingSize.height
-        hostingView.frame = NSRect(
-            x: 0,
-            y: 0,
-            width: Self.menuWidth,
-            height: height
-        )
-
-        let menuItem = NSMenuItem()
-        menuItem.view = hostingView
-
-        return menuItem
-    }
-
-    @objc private func handleSettings() {
-        settingsWindowController.showSettings()
-    }
-
-    @objc private func handleQuit() {
-        viewModel.quit()
+    private var sectionDivider: some View {
+        Divider().padding(.vertical, 4)
     }
 }
 
-struct BatteryMainInfoView: View {
-    let viewModel: MenuViewModel
+private struct MenuActionButton: View {
+    let title: String
+    let action: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
-        BatteryMainInfo(
-            label: String(localized: "Battery"),
-            value: viewModel.batteryPercentageText
-        )
-    }
-}
-
-struct BatteryAdditionalInfoObserverView: View {
-    let label: String
-    let viewModel: MenuViewModel
-    let keyPath: KeyPath<MenuViewModel, String>
-
-    var body: some View {
-        BatteryAdditionalInfo(label: label, value: viewModel[keyPath: keyPath])
-    }
-}
-
-struct PowerSankeyViewWrapper: View {
-    let viewModel: MenuViewModel
-
-    var body: some View {
-        PowerSankeyView(
-            powerSource: viewModel.powerSource,
-            isCharging: viewModel.isCharging,
-            batteryPower: viewModel.batteryPower,
-            adapterPower: viewModel.adapterPower,
-            systemPower: viewModel.systemPower
-        )
+        Button(action: action) {
+            HStack {
+                Text(title)
+                Spacer()
+            }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isHovering ? Color.accentColor.opacity(0.85) : Color.clear)
+                    .padding(.horizontal, 5)
+            )
+            .foregroundStyle(isHovering ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 

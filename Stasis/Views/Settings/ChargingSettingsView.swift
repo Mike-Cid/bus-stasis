@@ -102,6 +102,10 @@ struct ChargingSettingsView: View {
             } footer: {
                 if !hasAnyControl {
                     Text("Charge management is not supported on this device.")
+                } else if !hasChargingControl {
+                    Text(
+                        "This Mac does not expose a charge inhibit key, so the charge limit cannot be enforced."
+                    )
                 }
             }
 
