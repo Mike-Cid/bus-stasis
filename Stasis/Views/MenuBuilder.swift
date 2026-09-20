@@ -269,7 +269,10 @@ struct WorkWithACToggleView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.mini)
-                .disabled(!viewModel.adapterConnected || viewModel.forceDischargeActive)
+                .disabled(
+                    !viewModel.canPauseCharging || !viewModel.adapterConnected
+                        || viewModel.forceDischargeActive
+                )
             }
             Text(viewModel.workWithACStatusText)
                 .font(.caption)

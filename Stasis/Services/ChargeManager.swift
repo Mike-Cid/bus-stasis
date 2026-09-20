@@ -17,6 +17,7 @@ class ChargeManager {
     private var lastAdapterConnected: Bool?
     private var lastManageChargingEnabled: Bool?
     private var hasReachedChargeLimit = false
+    private var chargingControlRejected = false
     private var lastNotifiedChargingState: Bool?
 
     private(set) var chargeControlFailure: String?
@@ -175,7 +176,7 @@ class ChargeManager {
 
         let capabilities = batteryService.deviceCapabilities
 
-        if let desiredCharging, capabilities.chargingControl {
+        if let desiredCharging, capabilities.chargingControl, !chargingControlRejected {
             setCharging(enabled: desiredCharging)
             sendChargingStateNotification(
                 charging: desiredCharging, reason: chargingStateReason
@@ -196,6 +197,7 @@ class ChargeManager {
     private func clearCachedState() {
         lastNotifiedChargingState = nil
         hasReachedChargeLimit = false
+        chargingControlRejected = false
     }
 
     private func resetToDefaults() {
@@ -223,8 +225,11 @@ class ChargeManager {
                 chargeControlFailure = nil
                 batteryService.scheduleSinglePoll()
             } catch {
+                // Retrying a write the firmware refuses only repeats the failure,
+                // so charge control stays off until the state is reset.
                 logger.error("Failed to set charging to \(enabled): \(error)")
                 chargeControlFailure = error.localizedDescription
+                chargingControlRejected = true
             }
         }
     }

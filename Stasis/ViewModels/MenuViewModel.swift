@@ -2,6 +2,7 @@ import AppKit
 import Defaults
 import Foundation
 import Observation
+import smc_power
 
 @MainActor
 @Observable
@@ -33,6 +34,7 @@ class MenuViewModel {
     var forceDischargeActive: Bool { chargeManager.forceDischargeActive }
     var workWithACActive: Bool { chargeManager.workWithACActive }
     var chargeControlFailure: String? { chargeManager.chargeControlFailure }
+    var canPauseCharging: Bool { batteryService.deviceCapabilities.chargingControl }
     var workWithACStatusText: String = "Off"
     var workWithACBatteryAssistDetected: Bool = false
     var workWithACChargingDetected: Bool = false
@@ -168,6 +170,13 @@ class MenuViewModel {
         isCharging: Bool,
         adapterConnected: Bool
     ) {
+        guard canPauseCharging else {
+            workWithACStatusText = "Unavailable (this Mac cannot pause charging)"
+            workWithACBatteryAssistDetected = false
+            workWithACChargingDetected = false
+            return
+        }
+
         guard workWithACActive else {
             workWithACStatusText = "Off"
             workWithACBatteryAssistDetected = false

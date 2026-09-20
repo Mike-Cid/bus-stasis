@@ -104,7 +104,7 @@ struct ChargingSettingsView: View {
                     Text("Charge management is not supported on this device.")
                 } else if !hasChargingControl {
                     Text(
-                        "This Mac does not expose a charge inhibit key, so the charge limit cannot be enforced."
+                        "This Mac cannot pause charging: macOS no longer exposes the required SMC key, and the only remaining control cuts the adapter instead. Use System Settings \u{2192} Battery \u{2192} Charge Limit to hold a charge level. Discharge control still works."
                     )
                 }
             }
