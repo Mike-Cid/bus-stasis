@@ -18,6 +18,7 @@ class ChargeManager {
     private var lastManageChargingEnabled: Bool?
     private var hasReachedChargeLimit = false
     private var chargingControlRejected = false
+    private var systemChargeLimitBeforeBypass: Int?
     private var lastNotifiedChargingState: Bool?
 
     private(set) var chargeControlFailure: String?
@@ -331,8 +332,57 @@ class ChargeManager {
         if workWithACActive {
             chargeLimitOverrideActive = false
             forceDischargeActive = false
+            startBypass()
+        } else {
+            stopBypass()
         }
         evaluate(controlState: batteryService.controlState)
+    }
+
+    /// Holds the battery where it is by asking the system for a charge limit the
+    /// battery has already reached, so the machine runs from the adapter without
+    /// charging. The previous limit is remembered so turning the switch off puts
+    /// the user's own setting back.
+    private func startBypass() {
+        let service = SmartChargeService.shared
+        let percentage = batteryService.controlState.batteryPercentage
+
+        guard service.isSupported, let target = service.holdingLevel(forBatteryPercentage: percentage)
+        else {
+            let lowest = service.availableLimits.min()
+            chargeControlFailure =
+                lowest.map {
+                    String(
+                        localized:
+                            "Work with AC needs the battery at \($0)% or above: the system does not hold a charge below that."
+                    )
+                } ?? SmartChargeError.unavailable.localizedDescription
+            workWithACActive = false
+            return
+        }
+
+        do {
+            systemChargeLimitBeforeBypass = service.currentLimit
+            try service.setLimit(target)
+            chargeControlFailure = nil
+            logger.info("Work with AC holding the battery at \(target)%")
+        } catch {
+            logger.error("Work with AC failed: \(error)")
+            chargeControlFailure = error.localizedDescription
+            workWithACActive = false
+        }
+    }
+
+    private func stopBypass() {
+        guard let previous = systemChargeLimitBeforeBypass else { return }
+        systemChargeLimitBeforeBypass = nil
+        do {
+            try SmartChargeService.shared.setLimit(previous)
+            logger.info("Work with AC restored the system charge limit to \(previous)%")
+        } catch {
+            logger.error("Restoring the system charge limit failed: \(error)")
+            chargeControlFailure = error.localizedDescription
+        }
     }
 
     func stop() {

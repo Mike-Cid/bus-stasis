@@ -34,7 +34,9 @@ class MenuViewModel {
     var forceDischargeActive: Bool { chargeManager.forceDischargeActive }
     var workWithACActive: Bool { chargeManager.workWithACActive }
     var chargeControlFailure: String? { chargeManager.chargeControlFailure }
-    var canPauseCharging: Bool { batteryService.deviceCapabilities.chargingControl }
+    var canPauseCharging: Bool {
+        batteryService.deviceCapabilities.chargingControl || SmartChargeService.shared.isSupported
+    }
     var workWithACStatusText: String = "Off"
     var workWithACBatteryAssistDetected: Bool = false
     var workWithACChargingDetected: Bool = false
